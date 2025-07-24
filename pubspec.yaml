@@ -34,7 +34,7 @@ dependencies:
   youtube_player_flutter: ^9.1.1  # To play YouTube videos within your app
   url_launcher: ^6.2.1     # To open external links (e.g., YouTube app)
   provider: ^6.0.5           # For state management
-  shared_preferences: ^2.2.2 # To save favorites/watch later
+  shared_preferences: ^2.1.0 # To save favorites/watch later
   local_auth: ^2.1.6         # For biometric login
   #google_mobile_ads: ^6.0.0  # For AdMob integration
   cached_network_image: ^3.3.1 # Optimized image loading
