@@ -3,6 +3,11 @@ import 'package:http/http.dart' as http;
 import '../models/video_model.dart';
 import '../config/api_keys.dart';
 
+class QuotaExceededException implements Exception {
+  final String message;
+  QuotaExceededException(this.message);
+}
+
 class YouTubeService {
   String? _nextPageToken;
   bool _hasMore = true;
@@ -12,8 +17,8 @@ class YouTubeService {
     final url = Uri.parse(
       "https://www.googleapis.com/youtube/v3/search"
       "?part=snippet"
-      "&maxResults=10"
-      "&q=$query"
+      "&maxResults=20"
+      "&q=${Uri.encodeComponent(query)}"
       "&type=video"
       "&videoDuration=short"
       "&order=date"
@@ -35,11 +40,16 @@ class YouTubeService {
 
         // Map API results to your VideoModel instances
         return items.map((item) => VideoModel.fromJson(item)).toList();
-      } else {
-        // Log the error body for debugging
-        print('YouTube API error: ${response.statusCode} ${response.body}');
-        return [];
+      } else if (response.statusCode == 403) {
+      final data = json.decode(response.body);
+      final errorReason = (data['error']['errors'] as List<dynamic>).first['reason'];
+      if (errorReason == 'quotaExceeded') {
+        throw QuotaExceededException('Quota exceeded: please wait and try later.');
       }
+      throw Exception('API Error: ${response.body}');
+    } else {
+      throw Exception('API Error: ${response.body}');
+    }
     } catch (e) {
       print('Exception fetching videos: $e');
       return [];
@@ -55,5 +65,5 @@ class YouTubeService {
 
   /// Returns the current pagination token.
   String? get nextPageToken => _nextPageToken;
-  
+
 }
