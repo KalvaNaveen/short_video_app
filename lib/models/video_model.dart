@@ -3,11 +3,13 @@ class VideoModel {
   final String title;
   final Map<String, String> thumbnails;
   bool isVisible = false;   // to track visibility for autoplay
+  int localLikes = 0;
 
   VideoModel({
     required this.videoId,
     required this.title,
     required this.thumbnails,
+     this.localLikes = 0
   });
 
   factory VideoModel.fromJson(Map<String, dynamic> item) {

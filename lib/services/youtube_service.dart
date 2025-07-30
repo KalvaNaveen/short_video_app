@@ -21,17 +21,27 @@ class YouTubeService {
       "&key=$YOUTUBE_API_KEY"
     );
 
-    final response = await http.get(url);
+   try {
+      final response = await http.get(url);
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      _nextPageToken = data['nextPageToken'];
-      _hasMore = _nextPageToken != null;
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
 
-      final items = data['items'] as List;
-      return items.map((item) => VideoModel.fromJson(item)).toList();
-    } else {
-      print('Error fetching videos: ${response.body}');
+        // Save the next page token for pagination
+        _nextPageToken = data['nextPageToken'];
+        _hasMore = _nextPageToken != null;
+
+        final List<dynamic> items = data['items'] ?? [];
+
+        // Map API results to your VideoModel instances
+        return items.map((item) => VideoModel.fromJson(item)).toList();
+      } else {
+        // Log the error body for debugging
+        print('YouTube API error: ${response.statusCode} ${response.body}');
+        return [];
+      }
+    } catch (e) {
+      print('Exception fetching videos: $e');
       return [];
     }
   }
@@ -40,4 +50,10 @@ class YouTubeService {
     _nextPageToken = null;
     _hasMore = true;
   }
+   /// Returns whether there are more pages available to fetch.
+  bool get hasMore => _hasMore;
+
+  /// Returns the current pagination token.
+  String? get nextPageToken => _nextPageToken;
+  
 }
