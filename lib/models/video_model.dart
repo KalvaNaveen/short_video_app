@@ -1,48 +1,41 @@
 class VideoModel {
   final String videoId;
   final String title;
-  final Map<String, String> thumbnails;
-  bool isVisible = false;   // to track visibility for autoplay
-  int localLikes = 0;
+  final String thumbnailUrl;
 
   VideoModel({
     required this.videoId,
     required this.title,
-    required this.thumbnails,
-     this.localLikes = 0
+    required this.thumbnailUrl,
   });
 
-  factory VideoModel.fromJson(Map<String, dynamic> item) {
-    final snippet = item['snippet'];
-    final id = item['id'];
-    if (id == null || id['videoId'] == null || snippet == null) {
-      throw Exception('Invalid video data');
+  factory VideoModel.fromJson(Map<String, dynamic>? json) {
+    if (json == null) {
+      // Return empty or default values if json is null
+      return VideoModel(videoId: '', title: '', thumbnailUrl: '');
     }
-    final thumbs = snippet['thumbnails'] ?? {};
+
+    final id = json['id'];
+    final snippet = json['snippet'];
+    final thumbnails = snippet != null ? snippet['thumbnails'] : null;
+    final mediumThumbnail = thumbnails != null ? thumbnails['medium'] : null;
 
     return VideoModel(
-      videoId: id['videoId'],
-      title: snippet['title'] ?? 'Untitled',
-      thumbnails: {
-        if (thumbs['default'] != null) 'default': thumbs['default']['url'],
-        if (thumbs['medium'] != null) 'medium': thumbs['medium']['url'],
-        if (thumbs['high'] != null) 'high': thumbs['high']['url'],
-        if (thumbs['standard'] != null) 'standard': thumbs['standard']['url'],
-        if (thumbs['maxres'] != null) 'maxres': thumbs['maxres']['url'],
-      },
+      videoId: (id != null && id['videoId'] != null) ? id['videoId'] as String : '',
+      title: (snippet != null && snippet['title'] != null) ? snippet['title'] as String : '',
+      thumbnailUrl: (mediumThumbnail != null && mediumThumbnail['url'] != null)
+          ? mediumThumbnail['url'] as String
+          : '',
     );
   }
 
-  String getThumbnailUrl({bool highQuality = false}) {
-    if (highQuality) {
-      return thumbnails['maxres'] ??
-             thumbnails['standard'] ??
-             thumbnails['high'] ??
-             thumbnails['medium'] ??
-             thumbnails['default'] ??
-             '';
-    } else {
-      return thumbnails['medium'] ?? thumbnails['default'] ?? '';
-    }
+  Map<String, dynamic> toJson() {
+    return {
+      'videoId': videoId,
+      'title': title,
+      'thumbnailUrl': thumbnailUrl,
+    };
   }
+
+  String getThumbnailUrl() => thumbnailUrl;
 }
