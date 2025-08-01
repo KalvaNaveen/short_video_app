@@ -21,22 +21,25 @@ version: 1.0.0+1
 environment:
   sdk: ^3.8.1
 
+
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
 # consider running `flutter pub upgrade --major-versions`. Alternatively,
 # dependencies can be manually updated by changing the version numbers below to
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
-dependencies:
+dependencies: 
   flutter:
     sdk: flutter
+
+  #characters: ^1.3.0
   http: ^1.2.1
   youtube_player_flutter: ^9.1.1  # To play YouTube videos within your app
   url_launcher: ^6.2.1     # To open external links (e.g., YouTube app)
   provider: ^6.0.5           # For state management
-  shared_preferences: ^2.2.2 # To save favorites/watch later
+  shared_preferences: ^2.1.0 # To save favorites/watch later
   local_auth: ^2.1.6         # For biometric login
-  #google_mobile_ads: ^6.0.0  # For AdMob integration
+  google_mobile_ads: ^6.0.0  # For AdMob integration
   cached_network_image: ^3.3.1 # Optimized image loading
   firebase_core: ^3.0.0      # Optional: Firebase integration
   firebase_auth: ^5.5.0      # Optional: User account backend
@@ -45,18 +48,15 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  share_plus: ^7.2.1 # To share videos or links to other apps
 
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-
+  
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
-  flutter_lints: ^6.0.0
-
+  # rules and activating additionsal ones.
+ 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

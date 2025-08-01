@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.gms.ads.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ad_view"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#222">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="10dp">
+
+        <ImageView
+            android:id="@+id/ad_icon"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:contentDescription="Ad Icon"
+            android:scaleType="centerCrop"
+            android:background="@drawable/ad_icon_radius"
+            />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:paddingLeft="12dp">
+            
+            <TextView
+                android:id="@+id/ad_headline"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#fff"
+                android:textStyle="bold"
+                android:textSize="18sp"
+                android:maxLines="1"
+                />
+            
+            <TextView
+                android:id="@+id/ad_body"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#ccc"
+                android:textSize="14sp"
+                android:maxLines="2"
+                />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/ad_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Ad"
+            android:textColor="#fff"
+            android:textStyle="bold"
+            android:background="@drawable/ad_label_bg"
+            android:padding="6dp"
+            android:textSize="12sp" />
+    </LinearLayout>
+</com.google.android.gms.ads.nativead.NativeAdView>
