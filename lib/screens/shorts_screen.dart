@@ -3,9 +3,10 @@ import 'package:share_plus/share_plus.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 import '../models/video_model.dart';
+import '../widgets/ad_manager.dart';
 
 class ShortsScreen extends StatefulWidget {
-  final List<VideoModel> videos; // Must be a reference to mutable list
+  final List<VideoModel> videos;
   final int initialIndex;
   final Set<String> favoriteIds;
   final Function(String) onToggle;
@@ -23,14 +24,15 @@ class ShortsScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _ShortsScreenState createState() => _ShortsScreenState();
+  State<ShortsScreen> createState() => _ShortsScreenState();
 }
 
 class _ShortsScreenState extends State<ShortsScreen> {
-  late PageController _pageController;
+  late final PageController _pageController;
   final Map<int, YoutubePlayerController> _controllers = {};
-  int _currentIndex = 0;
   late Set<String> favoriteIds;
+  int _currentIndex = 0;
+  int _videosViewed = 0;
 
   @override
   void initState() {
@@ -43,51 +45,78 @@ class _ShortsScreenState extends State<ShortsScreen> {
     _initControllersAround(_currentIndex);
   }
 
-  void _initControllersAround(int index) {
+  void _initControllersAround(int idx) {
     final indexes = [
-      if (index - 1 >= 0) index - 1,
-      index,
-      if (index + 1 < widget.videos.length) index + 1,
+      if (idx - 1 >= 0) idx - 1,
+      idx,
+      if (idx + 1 < widget.videos.length) idx + 1,
     ];
 
-    // Dispose controllers out of the current window
-    final toDispose = _controllers.keys.where((key) => !indexes.contains(key)).toList();
-    for (var key in toDispose) {
-      _controllers[key]?.dispose();
-      _controllers.remove(key);
+    for (final i in _controllers.keys.toList()) {
+      if (!indexes.contains(i)) {
+        _controllers[i]?.dispose();
+        _controllers.remove(i);
+      }
     }
 
-    // Initialize missing controllers & manage play/pause
-    for (var i in indexes) {
-      if (!_controllers.containsKey(i)) {
-        _controllers[i] = YoutubePlayerController(
+    for (final i in indexes) {
+      if (!_controllers.containsKey(i) &&
+          i >= 0 &&
+          i < widget.videos.length) {
+        final ctrl = YoutubePlayerController(
           initialVideoId: widget.videos[i].videoId,
-          flags: YoutubePlayerFlags(
-            autoPlay: i == index,
+          flags: const YoutubePlayerFlags(
+            autoPlay: false,
             mute: false,
             disableDragSeek: true,
             loop: false,
-            forceHD: false,
+            isLive: false,
             enableCaption: false,
           ),
         );
-      } else {
-        if (i == index) {
+        _controllers[i] = ctrl;
+        if (i != idx) ctrl.pause();
+      } else if (_controllers.containsKey(i)) {
+        if (i == idx)
           _controllers[i]!.play();
-        } else {
+        else
           _controllers[i]!.pause();
-        }
       }
     }
   }
 
   @override
   void dispose() {
-    for (var ctrl in _controllers.values) {
-      ctrl.dispose();
+    for (var c in _controllers.values) {
+      c.dispose();
     }
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _onPageChanged(int idx) async {
+    if (idx < 0 || idx >= widget.videos.length) return;
+
+    setState(() {
+      _currentIndex = idx;
+      _videosViewed++;
+    });
+
+    _initControllersAround(idx);
+
+    // Show rewarded interstitial every 7 videos
+    if (_videosViewed % 7 == 0) {
+      final rewardedAd = AdManager.of(context);
+      if (rewardedAd != null) {
+        await rewardedAd.showRewardedInterstitialAd(context);
+      }
+    }
+
+    // Load more near the end
+    if (idx >= widget.videos.length - 5 && !widget.isLoading) {
+      await widget.loadMore();
+      setState(() {});
+    }
   }
 
   void _togglePlayPause() {
@@ -115,21 +144,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
 
   void _onShare() {
     final video = widget.videos[_currentIndex];
-    final url = "https://www.youtube.com/watch?v=${video.videoId}";
+    final url = 'https://www.youtube.com/watch?v=${video.videoId}';
     Share.share('Check out this video on ReelRush: $url');
-  }
-
-  void _onPageChanged(int index) {
-    if (index >= widget.videos.length) return;
-    setState(() {
-      _currentIndex = index;
-    });
-    _initControllersAround(_currentIndex);
-
-    // Trigger loading more videos near end
-    if (_currentIndex >= widget.videos.length - 5 && !widget.isLoading) {
-      widget.loadMore();
-    }
   }
 
   @override
@@ -138,10 +154,8 @@ class _ShortsScreenState extends State<ShortsScreen> {
       return Scaffold(
         backgroundColor: Colors.black,
         body: const Center(
-          child: Text(
-            'No videos available',
-            style: TextStyle(color: Colors.white),
-          ),
+          child: Text('No videos available',
+              style: TextStyle(color: Colors.white)),
         ),
       );
     }
@@ -159,78 +173,77 @@ class _ShortsScreenState extends State<ShortsScreen> {
           playedColor: Colors.redAccent,
           handleColor: Colors.redAccent,
         ),
-        onEnded: (_) {
+        onEnded: (_) async {
           if (_currentIndex < widget.videos.length - 1) {
-            _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+            await Future.delayed(const Duration(milliseconds: 500));
+            _pageController.nextPage(
+                duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
           }
         },
         bottomActions: const [],
       ),
-      builder: (context, player) {
-        return Scaffold(
-          backgroundColor: Colors.black,
-          body: Stack(
-            children: [
-              GestureDetector(
-                onTap: _togglePlayPause,
-                child: SizedBox.expand(child: player),
-              ),
-              Positioned(
-                bottom: 80,
-                right: 16,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    IconButton(
-                      icon: Icon(isFav ? Icons.favorite : Icons.favorite_border,
-                        color: isFav ? Colors.redAccent : Colors.white,
-                        size: 36,
-                      ),
-                      onPressed: () => _handleFavoriteToggle(video.videoId),
-                      tooltip: 'Favorite',
-                    ),
-                    const SizedBox(height: 16),
-                    IconButton(
-                      icon: const Icon(Icons.share, color: Colors.white, size: 28),
-                      onPressed: _onShare,
-                      tooltip: 'Share',
-                    ),
-                  ],
-                ),
-              ),
-              Positioned(
-                bottom: 40,
-                left: 16,
-                right: 16,
-                child: Text(
-                  video.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    shadows: [Shadow(offset: Offset(0, 1), blurRadius: 4, color: Colors.black54)],
+      builder: (context, player) => Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _togglePlayPause,
+              child: SizedBox.expand(child: player),
+            ),
+            Positioned(
+              bottom: 80,
+              right: 16,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: Icon(isFav ? Icons.favorite : Icons.favorite_border,
+                        color: isFav ? Colors.redAccent : Colors.white, size: 36),
+                    onPressed: () => _handleFavoriteToggle(video.videoId),
+                    tooltip: 'Favorite',
                   ),
-                ),
-              ),
-              Positioned.fill(
-                child: IgnorePointer(
-                  ignoring: true,
-                  child: PageView.builder(
-                    controller: _pageController,
-                    scrollDirection: Axis.vertical,
-                    itemCount: widget.videos.length,
-                    onPageChanged: _onPageChanged,
-                    itemBuilder: (_, __) => const SizedBox.shrink(),
+                  const SizedBox(height: 16),
+                  IconButton(
+                    icon: const Icon(Icons.share, color: Colors.white, size: 28),
+                    onPressed: _onShare,
+                    tooltip: 'Share',
                   ),
+                ],
+              ),
+            ),
+            Positioned(
+              bottom: 40,
+              left: 16,
+              right: 16,
+              child: Text(
+                video.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  shadows: [Shadow(offset: Offset(0, 1), blurRadius: 4, color: Colors.black54)],
                 ),
               ),
-            ],
-          ),
-        );
-      },
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: true,
+                child: PageView.builder(
+                  controller: _pageController,
+                  scrollDirection: Axis.vertical,
+                  itemCount: widget.videos.length,
+                  onPageChanged: _onPageChanged,
+                  itemBuilder: (_, __) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

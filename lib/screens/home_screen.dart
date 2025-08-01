@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-
 import '../models/video_model.dart';
 import '../services/youtube_service.dart';
 import '../utils/favorites_manager.dart';
+import '../widgets/ad_manager.dart';
 import 'shorts_screen.dart';
 
 class QuotaExceededException implements Exception {
@@ -23,7 +22,7 @@ class Category {
   const Category(this.name, this.icon);
 }
 
-// Favorites screen displaying user's favorite videos
+// Favorites Screen
 class FavoritesScreen extends StatefulWidget {
   final List<VideoModel> allVideos;
 
@@ -142,7 +141,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 }
 
-// Video preview widget with autoplay/muted video using visibility detection
+// Video preview widget for grid thumbnail autoplay with visibility detection
 class _VideoPreview extends StatefulWidget {
   final VideoModel video;
 
@@ -159,7 +158,6 @@ class __VideoPreviewState extends State<_VideoPreview> with AutomaticKeepAliveCl
   @override
   void initState() {
     super.initState();
-
     _controller = YoutubePlayerController(
       initialVideoId: widget.video.videoId,
       flags: const YoutubePlayerFlags(
@@ -200,17 +198,14 @@ class __VideoPreviewState extends State<_VideoPreview> with AutomaticKeepAliveCl
       onVisibilityChanged: _handleVisibilityChanged,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child:Container(
-        
-  color: Colors.black,
-  child:  YoutubePlayer(
+        child: Container( color: Colors.black,child:  YoutubePlayer(
           controller: _controller,
           showVideoProgressIndicator: false,
           progressIndicatorColor: Colors.redAccent,
-          aspectRatio: 9 / 16,
+          aspectRatio: 9 / 16
         ),
-       )
       ),
+      )
     );
   }
 
@@ -218,7 +213,7 @@ class __VideoPreviewState extends State<_VideoPreview> with AutomaticKeepAliveCl
   bool get wantKeepAlive => true;
 }
 
-// Main Home Screen
+// HomeScreen main widget
 class HomeScreen extends StatefulWidget {
   final List<VideoModel>? initialVideos;
 
@@ -228,7 +223,7 @@ class HomeScreen extends StatefulWidget {
   _HomeScreenState createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final YouTubeService _service = YouTubeService();
   final FavoritesManager _favoritesManager = FavoritesManager();
 
@@ -274,6 +269,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   final Set<String> _pendingCategoryPages = {};
   final Set<String> _pendingSearchPages = {};
+  final int nativeAdInterval = 6;
 
   @override
   void initState() {
@@ -299,8 +295,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _initialLoad() async {
-    // Try cache first
-    final cached = await _loadCachedCategory(_selectedCategory);
+    // Load cache first
+    final cached = await _loadCategoryCache(_selectedCategory);
     if (cached.isNotEmpty) {
       _cachedVideos[_selectedCategory] = {null: cached};
       setState(() => _videos = cached);
@@ -332,14 +328,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _loadCategoryPage() async {
-    if (_categoryHasMore == false || _loading || _quotaExceeded) return;
+    if (!_categoryHasMore || _loading || _quotaExceeded) return;
 
     final pageToken = _categoryNextToken;
+    final key = "${_selectedCategory}::$pageToken";
 
-    final pendingKey = "${_selectedCategory}::$pageToken";
-    if (_pendingCategoryPages.contains(pendingKey)) return;
+    if (_pendingCategoryPages.contains(key)) return;
 
-    _pendingCategoryPages.add(pendingKey);
+    _pendingCategoryPages.add(key);
 
     setState(() => _loading = true);
 
@@ -352,39 +348,36 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       _cachedVideos.putIfAbsent(_selectedCategory, () => {})[pageToken] = newVideos;
 
       final pages = _cachedVideos[_selectedCategory]!;
-      final keys = pages.keys.toList()
-        ..sort((a, b) {
-          if (a == null) return -1;
-          if (b == null) return 1;
-          return a.compareTo(b);
-        });
-      final combined = <VideoModel>[];
-      for (var key in keys) combined.addAll(pages[key]!);
+      final keys = pages.keys.toList()..sort((a, b) {
+        if (a == null) return -1;
+        if (b == null) return 1;
+        return a.compareTo(b);
+      });
 
-      setState(() => _videos = combined);
+      final allVideos = <VideoModel>[];
+      for (var k in keys) allVideos.addAll(pages[k]!);
 
-      // Store first page cache persistently for Trending
+      setState(() => _videos = allVideos);
+
       if (_selectedCategory == "Trending" && pageToken == null) {
         await _saveCategoryCache(_selectedCategory, newVideos);
       }
     } on QuotaExceededException {
       setState(() => _quotaExceeded = true);
     } finally {
-      _pendingCategoryPages.remove(pendingKey);
+      _pendingCategoryPages.remove(key);
       setState(() => _loading = false);
     }
   }
 
   Future<void> _loadFavorites() async {
     final favs = await _favoritesManager.loadFavorites();
-    setState(() {
-      _favoriteIds = favs.toSet();
-    });
+    setState(() => _favoriteIds = favs.toSet());
   }
 
   bool _isFavorite(String id) => _favoriteIds.contains(id);
 
-  void _toggleFavorite(String id) async {
+  Future<void> _toggleFavorite(String id) async {
     if (_isFavorite(id)) {
       await _favoritesManager.removeFavorite(id);
       _favoriteIds.remove(id);
@@ -395,15 +388,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     setState(() {});
   }
 
-  Future<List<VideoModel>> _loadCachedCategory(String category) async {
+  Future<List<VideoModel>> _loadCategoryCache(String category) async {
     final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString("cache_$category");
-    if (data == null) return [];
+    final jsonString = prefs.getString('cache_$category');
+    if (jsonString == null) return [];
     try {
-      final list = jsonDecode(data) as List<dynamic>;
+      final list = jsonDecode(jsonString) as List;
       return list
           .whereType<Map<String, dynamic>>()
-          .map((json) => VideoModel.fromJson(json))
+          .map((e) => VideoModel.fromJson(e))
           .toList();
     } catch (e) {
       return [];
@@ -413,10 +406,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _saveCategoryCache(String category, List<VideoModel> videos) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = videos.map((e) => e.toJson()).toList();
-    await prefs.setString("cache_$category", jsonEncode(jsonList));
+    await prefs.setString('cache_$category', jsonEncode(jsonList));
   }
-
-  // Search-related functions
+  final int _nativeAdInterval = 6;
 
   Future<void> _performSearch(String query) async {
     final currentSearchId = ++_searchQueryId;
@@ -432,7 +424,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       _searchLoading = true;
     });
 
-    final cached = await _loadCachedCategory(query);
+    final cached = await _loadCategoryCache(query);
     if (cached.isNotEmpty && mounted && currentSearchId == _searchQueryId) {
       _cachedVideos[query] = {null: cached};
       setState(() => _searchResults = cached);
@@ -463,11 +455,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _loadMoreSearchResults() async {
     if (!_searchHasMore || _searchLoading || _quotaExceeded) return;
 
-    final token = _searchNextToken;
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
 
-    final key = "$query::$token";
+    final key = "$query::$_searchNextToken";
     if (_pendingSearchPages.contains(key)) return;
 
     _pendingSearchPages.add(key);
@@ -475,11 +466,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     setState(() => _searchLoading = true);
 
     try {
-      final newVideos = await _service.fetchShortVideos(query, pageToken: token);
+      final newVideos = await _service.fetchShortVideos(query, pageToken: _searchNextToken);
+
       _searchNextToken = _service.nextPageToken;
       _searchHasMore = _searchNextToken != null;
 
-      _cachedVideos.putIfAbsent(query, () => {})[token] = newVideos;
+      _cachedVideos.putIfAbsent(query, () => {})[_searchNextToken] = newVideos;
 
       final existingIds = _searchResults.map((v) => v.videoId).toSet();
       final uniqueVideos = newVideos.where((v) => !existingIds.contains(v.videoId)).toList();
@@ -507,7 +499,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
-
   void _scrollListener() {
     const threshold = 700;
     if (_loading || _searchLoading || _quotaExceeded) return;
@@ -522,16 +513,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _onVideoTap(int index) {
-    final list = _isSearching ? _searchResults : _videos;
+    List<VideoModel> listToPlay = _isSearching ? _searchResults : _videos;
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ShortsScreen(
-          videos: list,
+          videos: listToPlay,
           initialIndex: index,
           favoriteIds: _favoriteIds,
           onToggle: (id) async {
-             _toggleFavorite(id);
+            await _toggleFavorite(id);
           },
           loadMore: () async {
             if (_isSearching) {
@@ -553,44 +545,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final List<Widget> tabs = [
-      Column(
-        children: [
-          _buildSearchAndCategories(),
-          Expanded(child: _buildGrid()),
-        ],
-      ),
-      FavoritesScreen(allVideos: _videos),
-    ];
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('ReelRush'),
-        backgroundColor: Colors.black,
-      ),
-      backgroundColor: Colors.black,
-      body: tabs[_selectedNavIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedNavIndex,
-        selectedItemColor: Colors.redAccent,
-        unselectedItemColor: Colors.white70,
-        backgroundColor: Colors.black,
-        onTap: _onNavChanged,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.favorite),
-            label: 'Favorites',
-          ),
-        ],
-      ),
-    );
-  }
+
+
 
   Widget _buildSearchAndCategories() {
     return Material(
@@ -623,8 +580,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         hintText: 'Search Shorts',
                         hintStyle: const TextStyle(color: Colors.white70),
                         border: InputBorder.none,
-                        suffixIcon: _searchController.text.isEmpty
-                            ? const Icon(Icons.search, color: Colors.white70)
+                        suffixIcon: _searchController.text.isEmpty ? const Icon(Icons.search, color: Colors.white70)
                             : GestureDetector(
                                 onTap: () {
                                   _searchController.clear();
@@ -635,7 +591,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               ),
                       ),
                       textInputAction: TextInputAction.search,
-                      onSubmitted: (value) {
+                      onSubmitted: (_) {
                         FocusScope.of(context).unfocus();
                       },
                       onChanged: (_) => _onSearchChanged(),
@@ -660,11 +616,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           decoration: BoxDecoration(
                             color: isSelected ? Colors.redAccent : Colors.grey.shade900,
                             borderRadius: BorderRadius.circular(20),
-                            boxShadow: isSelected
-                                ? const [
-                                    BoxShadow(color: Colors.redAccent, offset: Offset(0, 3), blurRadius: 8),
-                                  ]
-                                : null,
+                            boxShadow: isSelected ? const [
+                              BoxShadow(color: Colors.redAccent, offset: Offset(0, 3), blurRadius: 8),
+                            ] : null,
                           ),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(20),
@@ -714,7 +668,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       );
     }
     List<VideoModel> activeList = _isSearching ? _searchResults : _videos;
-
+    final fullCount = activeList.length + (activeList.length ~/ nativeAdInterval);
     if (activeList.isEmpty) {
       if (_loading || _searchLoading) return const Center(child: CircularProgressIndicator());
       return const Center(child: Text('No videos found.', style: TextStyle(color: Colors.white)));
@@ -725,11 +679,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       controller: _scrollController,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8, childAspectRatio: 9 / 16),
-      itemCount: activeList.length,
+      itemCount: fullCount,
       itemBuilder: (context, index) {
-        final video = activeList[index];
+        if (index > 0 && index % nativeAdInterval == 0) {
+          // Insert native ad every 6th item
+          return AdManager.of(context)?.nativeAdWidget(height: 90) ??
+              const SizedBox(height: 90);
+        }
+        final videoIndex = index - (index ~/ nativeAdInterval);
+        final video = activeList[videoIndex];
         return GestureDetector(
-          onTap: () => _onVideoTap(index),
+          onTap: () => _onVideoTap(videoIndex),
           child: Stack(
             children: [
               _VideoPreview(video: video),
@@ -758,6 +718,54 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         );
       },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Widget> tabs = [
+      Column(
+        children: [
+          _buildSearchAndCategories(),
+          Expanded(child: _buildGrid()),
+        ],
+      ),
+      FavoritesScreen(allVideos: _videos),
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ReelRush'),
+        backgroundColor: Colors.black,
+      ),
+      backgroundColor: Colors.black,
+      body: tabs[_selectedNavIndex],
+bottomNavigationBar:Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      AdManager.of(context)?.bannerAdWidget() ?? const SizedBox(height: 50),
+      BottomNavigationBar(
+        currentIndex: _selectedNavIndex,
+        selectedItemColor: Colors.redAccent,
+        unselectedItemColor: Colors.white70,
+        backgroundColor: Colors.black,
+        onTap: _onNavChanged,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.favorite),
+            label: 'Favorites',
+          ),
+        ],
+       
+      )
+       ]
+      ),
+    
+      
     );
   }
 }
