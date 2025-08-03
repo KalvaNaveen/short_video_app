@@ -1,6 +1,6 @@
 class VideoModel {
   final String videoId;
-  final String title;
+  final String title; 
   final String thumbnailUrl;
 
   VideoModel({
@@ -23,9 +23,7 @@ class VideoModel {
     return VideoModel(
       videoId: (id != null && id['videoId'] != null) ? id['videoId'] as String : '',
       title: (snippet != null && snippet['title'] != null) ? snippet['title'] as String : '',
-      thumbnailUrl: (mediumThumbnail != null && mediumThumbnail['url'] != null)
-          ? mediumThumbnail['url'] as String
-          : '',
+      thumbnailUrl: (mediumThumbnail != null && mediumThumbnail['url'] != null) ? mediumThumbnail['url'] as String : '',
     );
   }
 
@@ -33,7 +31,7 @@ class VideoModel {
     return {
       'videoId': videoId,
       'title': title,
-      'thumbnailUrl': thumbnailUrl,
+      'thumbnailUrl': thumbnailUrl
     };
   }
 

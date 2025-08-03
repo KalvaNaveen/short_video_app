@@ -1,14 +1,12 @@
 
-// Use your real unit IDs!
-// final bannerAdId = 'ca-app-pub-1318338562171737/6088592088';
-// final nativeAdId = 'ca-app-pub-1318338562171737/6068410787';
-// final rewardedInterstitialId = 'ca-app-pub-1318338562171737/2129165770';
 
-// Use your TEST unit IDs!
 import 'package:flutter/material.dart';
 import 'package:reelrush/widgets/ad_manager.dart';
-import 'package:reelrush/screens/splash_screen.dart';
 import 'package:reelrush/screens/home_screen.dart';
+//Use your real unit IDs!
+final bannerAdId = 'ca-app-pub-1318338562171737/6088592088';
+final nativeAdId = 'ca-app-pub-1318338562171737/6068410787';
+final rewardedInterstitialId = 'ca-app-pub-1318338562171737/2129165770';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -40,8 +38,7 @@ class MyApp extends StatelessWidget {
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => const SplashScreen(),
-        '/home': (context) => const HomeScreen(),
+        '/': (context) => const HomeScreen(),
       },
       builder: (context, child) {
         // Add AdManager on top of everything, but inside MaterialApp
@@ -53,9 +50,9 @@ class MyApp extends StatelessWidget {
               left: 0,
               right: 0,
               child: AdManager(
-                bannerAdUnitId: 'ca-app-pub-3940256099942544/6300978111', // Test banner
-                nativeAdUnitId: 'ca-app-pub-3940256099942544/2247696110', // Test native
-                rewardedInterstitialAdUnitId: 'ca-app-pub-3940256099942544/5354046379', // Test rewarded interstitial
+                 bannerAdUnitId: bannerAdId, //'ca-app-pub-3940256099942544/9214589741', // Test banner
+                nativeAdUnitId: nativeAdId, //'ca-app-pub-3940256099942544/1044960115', // Test native
+                rewardedInterstitialAdUnitId: rewardedInterstitialId,// 'ca-app-pub-3940256099942544/5354046379', // Test rewarded interstitial
                 bannerHeight: 50,
                 // You can add a custom height for banner using bannerHeight param
               ),

@@ -31,15 +31,15 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />  
-            <!-- THIS IS THE AD MOB APP ID REAL   
+            <!-- THIS IS THE AD MOB APP ID REAL    -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-1318338562171737~8698227955"/>  -->
+            android:value="ca-app-pub-1318338562171737~8698227955"/> 
 
          <!-- THIS IS THE AD MOB APP ID *****-TEST    -->
-        <meta-data
+        <!-- <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>  
+            android:value="ca-app-pub-3940256099942544~3347511713"/>   -->
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

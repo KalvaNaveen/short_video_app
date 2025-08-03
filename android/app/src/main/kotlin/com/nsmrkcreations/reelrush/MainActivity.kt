@@ -1,4 +1,4 @@
-package com.example.short_video_app
+package com.nsmrkcreations.reelrush
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -15,5 +15,10 @@ class MainActivity: FlutterFragmentActivity() {
     GoogleMobileAdsPlugin.unregisterNativeAdFactory(flutterEngine, "listTile")
     super.cleanUpFlutterEngine(flutterEngine)
   }
+
+  override fun onDestroy() {
+    GoogleMobileAdsPlugin.unregisterNativeAdFactory(flutterEngine, "listTile")
+    super.onDestroy()
+}
 
 }

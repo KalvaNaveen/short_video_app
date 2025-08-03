@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "553354037019",
+    "project_id": "reelrush-73fd4",
+    "storage_bucket": "reelrush-73fd4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:553354037019:android:2ea9e9bccd2ce5623035be",
+        "android_client_info": {
+          "package_name": "com.nsmrkcreations.reelrush"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDZr7YamctgJeqRjYlgwpieNEQ9C08HbWo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

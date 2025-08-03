@@ -1,4 +1,4 @@
-package com.example.short_video_app // e.g. com.example.myapp
+package com.nsmrkcreations.reelrush
 
 import android.content.Context
 import android.view.LayoutInflater

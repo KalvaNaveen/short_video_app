@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:reelrush/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
@@ -44,6 +45,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
   Future<void> _loadFavorites() async {
     final favs = await _favoritesManager.loadFavorites();
+    if (!mounted) return;
     setState(() {
       _favoriteIds = favs.toSet();
     });
@@ -95,6 +97,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                       await _favoritesManager.addFavorite(id);
                       _favoriteIds.add(id);
                     }
+                    if (!mounted) return;
                     setState(() {});
                   },
                   loadMore: () async {},
@@ -299,13 +302,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final cached = await _loadCategoryCache(_selectedCategory);
     if (cached.isNotEmpty) {
       _cachedVideos[_selectedCategory] = {null: cached};
+      if (!mounted) return;
       setState(() => _videos = cached);
     }
     // Load fresh data in any case
     await _changeCategory(_selectedCategory);
+    //Log screen view
+    analytics.logScreenView(screenName: 'HomeScreen');
   }
 
   void _clearSearch() {
+    if (!mounted) return;
     setState(() {
       _isSearching = false;
       _searchResults.clear();
@@ -314,6 +321,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _changeCategory(String category) async {
+    if (!mounted) return;
     setState(() {
       _selectedCategory = category;
       _videos.clear();
@@ -329,24 +337,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Future<void> _loadCategoryPage() async {
     if (!_categoryHasMore || _loading || _quotaExceeded) return;
-
     final pageToken = _categoryNextToken;
     final key = "${_selectedCategory}::$pageToken";
-
     if (_pendingCategoryPages.contains(key)) return;
-
     _pendingCategoryPages.add(key);
-
+if (!mounted) return;
     setState(() => _loading = true);
-
     try {
       final newVideos = await _service.fetchShortVideos(_selectedCategory, pageToken: pageToken);
-
       _categoryNextToken = _service.nextPageToken;
       _categoryHasMore = _categoryNextToken != null;
-
       _cachedVideos.putIfAbsent(_selectedCategory, () => {})[pageToken] = newVideos;
-
       final pages = _cachedVideos[_selectedCategory]!;
       final keys = pages.keys.toList()..sort((a, b) {
         if (a == null) return -1;
@@ -356,22 +357,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
       final allVideos = <VideoModel>[];
       for (var k in keys) allVideos.addAll(pages[k]!);
-
+if (!mounted) return; 
       setState(() => _videos = allVideos);
 
       if (_selectedCategory == "Trending" && pageToken == null) {
         await _saveCategoryCache(_selectedCategory, newVideos);
       }
     } on QuotaExceededException {
+      if (!mounted) return;
       setState(() => _quotaExceeded = true);
     } finally {
       _pendingCategoryPages.remove(key);
+      if (!mounted) return;
       setState(() => _loading = false);
     }
   }
 
   Future<void> _loadFavorites() async {
     final favs = await _favoritesManager.loadFavorites();
+    if (!mounted) return;
     setState(() => _favoriteIds = favs.toSet());
   }
 
@@ -385,6 +389,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       await _favoritesManager.addFavorite(id);
       _favoriteIds.add(id);
     }
+    if (!mounted) return;
     setState(() {});
   }
 
@@ -408,7 +413,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final jsonList = videos.map((e) => e.toJson()).toList();
     await prefs.setString('cache_$category', jsonEncode(jsonList));
   }
-  final int _nativeAdInterval = 6;
 
   Future<void> _performSearch(String query) async {
     final currentSearchId = ++_searchQueryId;
@@ -416,7 +420,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _searchNextToken = null;
     _searchHasMore = true;
     _pendingSearchPages.clear();
-
+if (!mounted) return;
     setState(() {
       _isSearching = true;
       _searchResults.clear();
@@ -427,6 +431,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final cached = await _loadCategoryCache(query);
     if (cached.isNotEmpty && mounted && currentSearchId == _searchQueryId) {
       _cachedVideos[query] = {null: cached};
+      if (!mounted) return;
       setState(() => _searchResults = cached);
     }
 
@@ -435,7 +440,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (!mounted || currentSearchId != _searchQueryId) return;
 
       _cachedVideos[query] = {null: results};
-
+if (!mounted) return;
       setState(() {
         _searchResults = results;
         _searchNextToken = _service.nextPageToken;
@@ -443,10 +448,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       });
     } on QuotaExceededException {
       if (mounted && currentSearchId == _searchQueryId) {
+      if (!mounted) return;
         setState(() => _quotaExceeded = true);
       }
     } finally {
       if (mounted && currentSearchId == _searchQueryId) {
+        if (!mounted) return;
         setState(() => _searchLoading = false);
       }
     }
@@ -462,7 +469,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (_pendingSearchPages.contains(key)) return;
 
     _pendingSearchPages.add(key);
-
+if (!mounted) return;
     setState(() => _searchLoading = true);
 
     try {
@@ -475,30 +482,43 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
       final existingIds = _searchResults.map((v) => v.videoId).toSet();
       final uniqueVideos = newVideos.where((v) => !existingIds.contains(v.videoId)).toList();
-
+if (!mounted) return;
       setState(() {
         _searchResults.addAll(uniqueVideos);
       });
     } on QuotaExceededException {
+      if (!mounted) return;
       setState(() => _quotaExceeded = true);
     } finally {
       _pendingSearchPages.remove(key);
+      if (!mounted) return;
       setState(() => _searchLoading = false);
     }
   }
 
   void _onSearchChanged() {
-    final query = _searchController.text.trim();
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () async{
+      if (!mounted) return;
+      final query = _searchController.text.trim();
       if (query.isEmpty) {
-        _clearSearch();
+        
+        setState(() {
+        _isSearching = false;
+        _searchResults.clear();
+        _quotaExceeded = false;
+      });
       } else {
-        _performSearch(query);
+       await _performSearch(query);
       }
     });
   }
+@override
+void dispose() {
+ _debounceTimer?.cancel();
 
+  super.dispose();
+}
   void _scrollListener() {
     const threshold = 700;
     if (_loading || _searchLoading || _quotaExceeded) return;
@@ -513,24 +533,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _onVideoTap(int index) {
-    List<VideoModel> listToPlay = _isSearching ? _searchResults : _videos;
-
+    print('Opening ShortsScreen with videos count: ${_videos.length}');
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ShortsScreen(
-          videos: listToPlay,
+          videos: _isSearching ? _searchResults : _videos,
           initialIndex: index,
           favoriteIds: _favoriteIds,
           onToggle: (id) async {
             await _toggleFavorite(id);
           },
           loadMore: () async {
-            if (_isSearching) {
+            if (_isSearching) 
               await _loadMoreSearchResults();
-            } else {
+             else 
               await _loadCategoryPage();
-            }
+            if (!mounted) return;
+             setState(() {});
           },
           isLoading: _loading,
         ),
@@ -539,6 +559,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _onNavChanged(int index) {
+    if (!mounted) return;
     setState(() {
       _selectedNavIndex = index;
       if (index == 0) _clearSearch();
@@ -709,8 +730,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   child: Text(
                     video.title,
                     maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    overflow: TextOverflow.visible,
+                    style: const TextStyle(color: Colors.white,
+                     fontSize: 14,
+                     fontWeight: FontWeight.bold,
+                     shadows: [Shadow(offset: Offset(0, 1), blurRadius: 4, color: Colors.black54)],),
                   ),
                 ),
               )
@@ -743,8 +767,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 bottomNavigationBar:Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      AdManager.of(context)?.bannerAdWidget() ?? const SizedBox(height: 50),
-      BottomNavigationBar(
+      AdManager.of(context)?.bannerAdWidget() ?? const SizedBox(height: 50)
+      ,BottomNavigationBar(
         currentIndex: _selectedNavIndex,
         selectedItemColor: Colors.redAccent,
         unselectedItemColor: Colors.white70,
