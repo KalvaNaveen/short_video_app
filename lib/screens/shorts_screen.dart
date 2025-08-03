@@ -1,4 +1,3 @@
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:reelrush/services/auth_service.dart';
@@ -8,10 +7,8 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../widgets/ad_manager.dart';
 import '../services/auth_service.dart';
 
-// Make sure your Video model includes channelName, channelProfilePicUrl, subscriberCount, totalViews, totalLikes, etc.
-
 class ShortsScreen extends StatefulWidget {
-  final List videos; // List of your Video model
+  final List videos;
   final int initialIndex;
   final Set favoriteIds;
   final Function(String) onToggle;
@@ -40,11 +37,9 @@ class _ShortsScreenState extends State<ShortsScreen> with WidgetsBindingObserver
   int _videosViewed = 0;
   Set<String> _likedVideos = {};
 
-
-  // --- PRELOAD WINDOW: Controls how many videos before/after are kept hot. ---
-  static const int _preloadWindow = 4;
+  static const int _preloadWindow = 2;
   AuthService _authService = AuthService();
-  User? _firebaseUser; // 4 before + 4 after = 9 total kept hot
+  User? _firebaseUser;
 
   @override
   void initState() {
@@ -52,21 +47,26 @@ class _ShortsScreenState extends State<ShortsScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.addObserver(this);
     _currentIndex = widget.initialIndex;
     favoriteIds = Set.from(widget.favoriteIds);
+    
     _pageController = PageController(initialPage: _currentIndex);
-    _initControllersAround(_currentIndex);
-    // Optionally auto sign in Google on widget open:
-     FirebaseAuth.instance.authStateChanges().listen((user) {
-    setState(() {
-        _firebaseUser = user;
+    
+    // Initialize controllers first, then start playing
+    _initializeControllers();
+    
+    FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (mounted) {
+        setState(() {
+          _firebaseUser = user;
+        });
+      }
     });
-  });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    for (var c in _controllers.values) {
-      c.dispose();
+    for (var controller in _controllers.values) {
+      controller.dispose();
     }
     _controllers.clear();
     _pageController.dispose();
@@ -77,6 +77,7 @@ class _ShortsScreenState extends State<ShortsScreen> with WidgetsBindingObserver
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final controller = _controllers[_currentIndex];
     if (controller == null) return;
+    
     if (state == AppLifecycleState.paused) {
       controller.pause();
     } else if (state == AppLifecycleState.resumed) {
@@ -84,67 +85,140 @@ class _ShortsScreenState extends State<ShortsScreen> with WidgetsBindingObserver
     }
   }
 
-  void _initControllersAround(int idx) {
-    // Compute a window of indexes before and after the current video, e.g. -4..+4
-    final indexes = [
-      for (int i = idx - _preloadWindow; i <= idx + _preloadWindow; i++)
-        if (i >= 0 && i < widget.videos.length) i
-    ];
+  void _initializeControllers() {
+    // Create controllers for current and nearby videos
+    for (int i = 0; i < widget.videos.length; i++) {
+      if (i >= _currentIndex - _preloadWindow && i <= _currentIndex + _preloadWindow) {
+        _createController(i);
+      }
+    }
+    
+    // Start playing the current video after a brief delay
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (mounted) {
+        _playCurrentVideo();
+      }
+    });
+  }
 
-    // Dispose controllers outside window, so memory is freed
-    for (final key in _controllers.keys.toList()) {
-      if (!indexes.contains(key)) {
-        _controllers[key]?.dispose();
-        _controllers.remove(key);
+  void _createController(int index) {
+    if (_controllers.containsKey(index) || index >= widget.videos.length) return;
+    
+    final video = widget.videos[index];
+    _controllers[index] = YoutubePlayerController(
+      initialVideoId: video.videoId,
+      flags: const YoutubePlayerFlags(
+        autoPlay: true,
+        mute: false,
+        disableDragSeek: true,
+        loop: false,
+        isLive: false,
+        enableCaption: false,
+        hideControls: false,
+        controlsVisibleAtStart: false,
+        useHybridComposition: true,
+      ),
+    );
+  }
+
+  void _playCurrentVideo() {
+    // Pause all videos first
+    for (int i = 0; i < _controllers.length; i++) {
+      final controller = _controllers[i];
+      if (controller != null && i != _currentIndex) {
+        controller.pause();
       }
     }
 
-    // For all needed videos, initialize and pre-play controllers
-    for (final i in indexes) {
-      final video = widget.videos[i];
-      if (!_controllers.containsKey(i)) {
-        _controllers[i] = YoutubePlayerController(
-          initialVideoId: video.videoId,
-          flags: YoutubePlayerFlags(
-            autoPlay: true,
-            mute: false, // Mute by default, for preloading
-            disableDragSeek: true,
-            loop: false,
-            isLive: false,
-            enableCaption: false,
-            //forceHD: true,
-          ),
-        );
-      }
-    }
-
-    // Unmute and play *only* the current controller; mute and play the others
-    for (final entry in _controllers.entries) {
-      final controller = entry.value;
-      if (entry.key == idx) {
-        controller.play();
-      } else {
-        controller.play(); // keeps buffer hot, so next swipe = instant preplay
+    // Play current video with sound
+    final currentController = _controllers[_currentIndex];
+    if (currentController != null) {
+      currentController.play();
+      // Make sure it's unmuted
+      if (currentController.flags.mute) {
+        // Create a new controller if the current one is muted
+        _recreateCurrentController();
       }
     }
   }
 
-  Future<void> _onPageChanged(int idx) async {
-    if (idx < 0 || idx >= widget.videos.length) return;
+  void _recreateCurrentController() {
+    final currentController = _controllers[_currentIndex];
+    if (currentController != null) {
+      currentController.dispose();
+    }
+    
+    final video = widget.videos[_currentIndex];
+    _controllers[_currentIndex] = YoutubePlayerController(
+      initialVideoId: video.videoId,
+      flags: const YoutubePlayerFlags(
+        autoPlay: true,
+        mute: false,
+        disableDragSeek: true,
+        loop: false,
+        isLive: false,
+        enableCaption: false,
+        hideControls: false,
+        controlsVisibleAtStart: false,
+        useHybridComposition: true,
+      ),
+    );
+    
+    setState(() {});
+  }
+
+  void _manageControllers(int newIndex) {
+    // Create controllers for the new window
+    for (int i = newIndex - _preloadWindow; i <= newIndex + _preloadWindow; i++) {
+      if (i >= 0 && i < widget.videos.length) {
+        _createController(i);
+      }
+    }
+
+    // Only dispose controllers that are very far away to prevent memory issues
+    // Keep more controllers in memory for smoother scrolling
+    final keysToRemove = <int>[];
+    for (final key in _controllers.keys) {
+      if (key < newIndex - (_preloadWindow * 3) || key > newIndex + (_preloadWindow * 3)) {
+        keysToRemove.add(key);
+      }
+    }
+    
+    for (final key in keysToRemove) {
+      _controllers[key]?.dispose();
+      _controllers.remove(key);
+    }
+  }
+
+  Future<void> _onPageChanged(int index) async {
+    if (index < 0 || index >= widget.videos.length) return;
+    
     setState(() {
-      _currentIndex = idx;
+      _currentIndex = index;
       _videosViewed++;
     });
 
-    _initControllersAround(idx);
+    _manageControllers(index);
+    
+    // Play the new current video immediately
+    _playCurrentVideo();
 
-    // Load more early so infinite scroll never blocks
-    if (idx >= widget.videos.length - 10 && !widget.isLoading) {
-      await widget.loadMore();
-      if (mounted) setState(() {});
+    // Load more videos much earlier for true infinite scroll
+    // Start loading when user is 3 videos away from the end
+    if (index >= widget.videos.length - 3 && !widget.isLoading) {
+      try {
+        await widget.loadMore();
+        if (mounted) {
+          setState(() {
+            // Refresh the UI to show new videos are available
+          });
+        }
+      } catch (e) {
+        print('Error loading more videos: $e');
+      }
     }
 
-    // Show reward ad after N videos (optional)
+    // Show ads
     if (_videosViewed % 7 == 0) {
       final adManager = AdManager.of(context);
       if (adManager != null) {
@@ -156,6 +230,7 @@ class _ShortsScreenState extends State<ShortsScreen> with WidgetsBindingObserver
   void _togglePlayPause() {
     final controller = _controllers[_currentIndex];
     if (controller == null) return;
+    
     if (controller.value.isPlaying) {
       controller.pause();
     } else {
@@ -164,47 +239,59 @@ class _ShortsScreenState extends State<ShortsScreen> with WidgetsBindingObserver
     setState(() {});
   }
 
-  // Like & Subscribe logic with Google auth check
-  Future<void> _handleLike({
-    required String videoId,
-    required bool isLikeAction,
-  }) async {
+  Future<void> _handleLike({required String videoId, required bool isLikeAction}) async {
     if (_firebaseUser == null) {
       final user = await _authService.signInWithGoogle();
       if (user == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sign-in required to perform this action')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Sign-in required to perform this action')),
+          );
+        }
         return;
       }
-      setState(() { _firebaseUser = user; });
-    }
-    setState(() {
-      if (isLikeAction) {
-        if (_likedVideos.contains(videoId)) {
-          _likedVideos.remove(videoId);
-        } else {
-          _likedVideos.add(videoId);
-        }
+      if (mounted) {
+        setState(() { 
+          _firebaseUser = user; 
+        });
       }
-    });
-    // Optionally: persist these lists by user.id (see earlier example)
+    }
+    
+    if (mounted) {
+      setState(() {
+        if (isLikeAction) {
+          if (_likedVideos.contains(videoId)) {
+            _likedVideos.remove(videoId);
+          } else {
+            _likedVideos.add(videoId);
+          }
+        }
+      });
+    }
   }
 
   void _handleFavoriteToggle() {
+    // Ensure we have a valid current video
+    if (_currentIndex >= widget.videos.length) return;
+    
     final currVideoId = widget.videos[_currentIndex].videoId;
     widget.onToggle(currVideoId);
-    setState(() {
-      if (favoriteIds.contains(currVideoId)) {
-        favoriteIds.remove(currVideoId);
-      } else {
-        favoriteIds.add(currVideoId);
-      }
-    });
-    // Optionally persist favorites as shown in previous answers
+    
+    if (mounted) {
+      setState(() {
+        if (favoriteIds.contains(currVideoId)) {
+          favoriteIds.remove(currVideoId);
+        } else {
+          favoriteIds.add(currVideoId);
+        }
+      });
+    }
   }
 
   void _onShare() {
+    // Ensure we have a valid current video
+    if (_currentIndex >= widget.videos.length) return;
+    
     final video = widget.videos[_currentIndex];
     final url = 'https://www.youtube.com/watch?v=${video.videoId}';
     Share.share('Check out this video on ReelRush: $url');
@@ -213,67 +300,85 @@ class _ShortsScreenState extends State<ShortsScreen> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     if (widget.videos.isEmpty) {
-      return Scaffold(
+      return const Scaffold(
         backgroundColor: Colors.black,
-        body: const Center(
+        body: Center(
           child: Text('No videos available', style: TextStyle(color: Colors.white)),
         ),
       );
     }
 
-    final video = widget.videos[_currentIndex];
-    final controller = _controllers[_currentIndex];
-    if (controller == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            scrollDirection: Axis.vertical,
+            itemCount: widget.videos.length,
+            onPageChanged: _onPageChanged,
+            physics: const BouncingScrollPhysics(),
+            itemBuilder: (context, index) {
+              final video = widget.videos[index];
+              final controller = _controllers[index];
 
-    final isFav = favoriteIds.contains(video.videoId);
+              if (controller == null) {
+                return Container(
+                  color: Colors.black,
+                  child: const Center(
+                    child: CircularProgressIndicator(color: Colors.redAccent),
+                  ),
+                );
+              }
 
-    return YoutubePlayerBuilder(
-      player: YoutubePlayer(
-        key: ValueKey(video.videoId),
-        controller: controller,
-        showVideoProgressIndicator: true,
-        progressIndicatorColor: Colors.redAccent,
-        progressColors: const ProgressBarColors(
-          playedColor: Colors.redAccent,
-          handleColor: Colors.redAccent,
-        ),
-        onEnded: (_) async {
-          if (_currentIndex < widget.videos.length - 1) {
-            await Future.delayed(const Duration(milliseconds: 100));
-            _pageController.nextPage(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.fastEaseInToSlowEaseOut,
-            );
-          }
-        },
-        bottomActions: const [],
-      ),
-      builder: (context, player) => Scaffold(
-        backgroundColor: Colors.black,
-        body: Stack(
-          children: [
-            // Main vertical scroll
-            PageView.builder(
-              controller: _pageController,
-              scrollDirection: Axis.vertical,
-              itemCount: widget.videos.length,
-              onPageChanged: _onPageChanged,
-              itemBuilder: (context, index) {
-                if (index == _currentIndex) {
-                  return GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _togglePlayPause,
-                    child: SizedBox.expand(child: player),
-                  );
-                } else {
-                  // Show silent still for preloading (no spinner experienced!)
-                  return Container(color: Colors.black);
-                }
-              },
-            ),
-            // Action buttons
+              return GestureDetector(
+                onTap: _togglePlayPause,
+                child: YoutubePlayerBuilder(
+                  player: YoutubePlayer(
+                    key: ValueKey('${video.videoId}_$index'),
+                    controller: controller,
+                    showVideoProgressIndicator: true,
+                    progressIndicatorColor: Colors.redAccent,
+                    progressColors: const ProgressBarColors(
+                      playedColor: Colors.redAccent,
+                      handleColor: Colors.redAccent,
+                      backgroundColor: Colors.grey,
+                      bufferedColor: Colors.white24,
+                    ),
+                    onEnded: (_) {
+                      if (_currentIndex < widget.videos.length - 1) {
+                        Future.delayed(const Duration(milliseconds: 400), () {
+                          if (mounted) {
+                            _pageController.nextPage(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.fastLinearToSlowEaseIn,
+                            );
+                          }
+                        });
+                      }
+                    },
+                    bottomActions: const [],
+                    topActions: const [],
+                  ),
+                  builder: (context, player) => Container(
+                    width: double.infinity,
+                    height: double.infinity,
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: MediaQuery.of(context).size.width,
+                        height: MediaQuery.of(context).size.height,
+                        child: player,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+
+          // Action buttons - Only show if we have a valid current video
+          if (_currentIndex < widget.videos.length)
             Positioned(
               bottom: 120,
               right: 16,
@@ -281,65 +386,101 @@ class _ShortsScreenState extends State<ShortsScreen> with WidgetsBindingObserver
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // LIKE button (Google)
-                  IconButton(
-                    icon: Icon(
-                      _likedVideos.contains(video.videoId)
-                          ? Icons.thumb_up
-                          : Icons.thumb_up_outlined,
-                      color: _likedVideos.contains(video.videoId)
-                          ? Colors.redAccent
-                          : Colors.white,
-                      size: 36,
-                    ),
+                  _buildActionButton(
+                    icon: _likedVideos.contains(widget.videos[_currentIndex].videoId)
+                        ? Icons.thumb_up
+                        : Icons.thumb_up_outlined,
+                    color: _likedVideos.contains(widget.videos[_currentIndex].videoId)
+                        ? Colors.redAccent
+                        : Colors.white,
                     onPressed: () => _handleLike(
-                      videoId: video.videoId,
+                      videoId: widget.videos[_currentIndex].videoId,
                       isLikeAction: true,
                     ),
-                    tooltip: 'Like',                   
+                    tooltip: 'Like',
                   ),
-                  const SizedBox(height: 20),               
-                  // FAVORITE
-                  IconButton(
-                    icon: const Icon(Icons.share, size: 36, color: Colors.white,),
+                  const SizedBox(height: 20),
+                  
+                  _buildActionButton(
+                    icon: Icons.share,
+                    color: Colors.white,
                     onPressed: _onShare,
                     tooltip: 'Share',
                   ),
                   const SizedBox(height: 20),
-                 // SHARE 
-                  IconButton(
-                    icon: Icon(
-                      isFav ? Icons.favorite : Icons.favorite_border,
-                      size: 36,
-                      color: isFav ? Colors.redAccent : Colors.white,
-                    ),
+                  
+                  _buildActionButton(
+                    icon: favoriteIds.contains(widget.videos[_currentIndex].videoId)
+                        ? Icons.favorite
+                        : Icons.favorite_border,
+                    color: favoriteIds.contains(widget.videos[_currentIndex].videoId)
+                        ? Colors.redAccent
+                        : Colors.white,
                     onPressed: _handleFavoriteToggle,
                     tooltip: 'Favorite',
                   ),
                 ],
               ),
             ),
-            // Video title overlay
+
+          // Video title - Only show if we have a valid current video
+          if (_currentIndex < widget.videos.length)
             Positioned(
               left: 16,
-              right: 16,
+              right: 80,
               bottom: 40,
               child: Text(
-                video.title,
+                widget.videos[_currentIndex].title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
-                  shadows: [Shadow(blurRadius: 4, offset: Offset(0, 1), color: Colors.black54)],
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                  shadows: [
+                    Shadow(blurRadius: 8, offset: Offset(0, 2), color: Colors.black87),
+                  ],
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-          ],
-        ),
+
+          if (widget.isLoading)
+            const Positioned(
+              bottom: 10,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+    required String tooltip,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: IconButton(
+        icon: Icon(icon, size: 32, color: color),
+        onPressed: onPressed,
+        tooltip: tooltip,
+        splashRadius: 24,
       ),
     );
   }
 }
-

@@ -533,7 +533,6 @@ void dispose() {
   }
 
   void _onVideoTap(int index) {
-    print('Opening ShortsScreen with videos count: ${_videos.length}');
     Navigator.push(
       context,
       MaterialPageRoute(
